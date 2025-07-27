@@ -92,7 +92,7 @@ export default function Game() {
       onError={(error, errorInfo) => {
         console.error('Game page error:', error, errorInfo);
       }}
-      resetKeys={[gameState.score, gameState.isGameOver]}
+      resetKeys={[gameState.score, gameState.isGameOver.toString()]}
     >
       <main className="min-h-screen bg-gradient-to-b from-blue-400 to-blue-600 flex flex-col items-center justify-center p-2 sm:p-4">
         {/* Game Title */}

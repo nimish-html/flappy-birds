@@ -63,7 +63,7 @@ export const useResponsiveCanvas = (options: ResponsiveCanvasOptions = {}) => {
     
     setDimensions({ width, height, scale: finalScale });
     setIsMobile(isMobileDevice);
-  }, [maxWidth, maxHeight, aspectRatio, minScale, maxScale]);
+  }, [maxWidth, maxHeight, minScale, maxScale]);
 
   // Handle window resize
   useEffect(() => {
