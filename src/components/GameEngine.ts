@@ -603,6 +603,8 @@ export class GameEngine {
   /**
    * Check for answer selection when bird passes through answer zones
    * Requirement 2.4: Detect which answer was chosen
+   * 
+   * FIXED: Prevent multiple answer selections from the same obstacle
    */
   private checkAnswerSelection(): void {
     if (!this.gameState.bird.alive) {
@@ -619,12 +621,21 @@ export class GameEngine {
     // Check each math obstacle for answer selection
     for (const obstacle of this.gameState.obstacles) {
       if (obstacle instanceof MathObstacle) {
+        const obstacleId = (obstacle as any).id;
+        
+        // CRITICAL FIX: Check if this obstacle has already been answered
+        if ((obstacle as any).hasBeenAnswered) {
+          continue; // Skip obstacles that have already been answered
+        }
+        
         const selectedZone = obstacle.checkAnswerSelection(birdBounds);
         
         if (selectedZone && !this.pendingAnswerValidation) {
           // Check if this obstacle is associated with the current question
-          const obstacleId = (obstacle as any).id;
           if (obstacleId && this.questionSyncManager.isObstacleAssociatedWithCurrentQuestion(obstacleId)) {
+            // Mark this obstacle as answered to prevent multiple selections
+            (obstacle as any).hasBeenAnswered = true;
+            
             // Store the answer selection for validation
             this.pendingAnswerValidation = { obstacle, zone: selectedZone };
             
@@ -833,6 +844,9 @@ export class GameEngine {
   private returnMathObstacleToPool(obstacle: MathObstacle): void {
     // Reset obstacle state
     obstacle.passed = false;
+    
+    // FIXED: Reset the answered flag when cleaning up obstacles
+    (obstacle as any).hasBeenAnswered = false;
     
     // Note: Math obstacles contain questions, so we don't reuse them
     // as the question context changes. Just remove from active pool.
