@@ -47,6 +47,9 @@ export class MathQuestionManager {
     this.questionPool.used.push(selectedQuestion);
 
     this.currentQuestion = selectedQuestion;
+    
+    console.log(`DEBUG - MathQuestionManager.getNextQuestion(): "${selectedQuestion.question}" (ID: ${selectedQuestion.id}) - Available: ${this.questionPool.available.length}, Used: ${this.questionPool.used.length}`);
+    
     return selectedQuestion;
   }
 

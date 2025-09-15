@@ -78,7 +78,7 @@ export class GameEngine {
   private onQuestionUpdate?: (question: MathQuestion | null) => void;
   private onMathScoreUpdate?: (score: number, streak: number) => void;
   private onFeedbackUpdate?: (feedback: AnswerFeedback | null) => void;
-  
+
   // Math system
   private mathQuestionManager: MathQuestionManager;
   private questionSyncManager: QuestionSyncManager;
@@ -86,17 +86,17 @@ export class GameEngine {
   private answerHandler: AnswerHandler;
   private currentQuestion: MathQuestion | null = null;
   private pendingAnswerValidation: { obstacle: MathObstacle; zone: AnswerZone } | null = null;
-  
+
   // Visual effects
   private particleSystem: ParticleSystem;
   private visualEffects: VisualEffects;
-  
+
   // Obstacle generation system
   private obstaclePool: ObstaclePool;
   private mathObstaclePool: MathObstaclePool;
   private obstacleGenerationConfig: ObstacleGenerationConfig;
   private lastObstacleSpawnTime: number = 0;
-  
+
   // Performance monitoring
   private performanceMonitor: PerformanceMonitor;
   private performanceOptimizations: {
@@ -104,11 +104,11 @@ export class GameEngine {
     disabledScreenShake: boolean;
     reducedVisualEffects: boolean;
   } = {
-    reducedParticles: false,
-    disabledScreenShake: false,
-    reducedVisualEffects: false
-  };
-  
+      reducedParticles: false,
+      disabledScreenShake: false,
+      reducedVisualEffects: false
+    };
+
   // Error handling
   private errorCount = 0;
   private lastErrorTime = 0;
@@ -117,7 +117,7 @@ export class GameEngine {
   constructor(canvas?: HTMLCanvasElement) {
     this.gameState = this.createInitialState();
     this.particleSystem = new ParticleSystem();
-    
+
     // Initialize with canvas if provided
     if (canvas) {
       this.canvas = canvas;
@@ -128,7 +128,7 @@ export class GameEngine {
       screenShakeIntensity: 0,
       screenShakeTime: 0
     };
-    
+
     // Initialize math system
     this.mathQuestionManager = new MathQuestionManager();
     this.questionSyncManager = new QuestionSyncManager(this.mathQuestionManager, {
@@ -136,24 +136,24 @@ export class GameEngine {
     });
     this.scoringSystem = new ScoringSystem();
     this.answerHandler = new AnswerHandler(
-      this.scoringSystem, 
+      this.scoringSystem,
       this.particleSystem,
       {
         onFeedbackUpdate: (feedback) => this.onFeedbackUpdate?.(feedback)
       }
     );
-    
+
     // Initialize obstacle generation system
     this.obstaclePool = {
       active: [],
       inactive: []
     };
-    
+
     this.mathObstaclePool = {
       active: [],
       inactive: []
     };
-    
+
     this.obstacleGenerationConfig = {
       minSpacing: GAME_CONFIG.OBSTACLE_SPAWN_DISTANCE * 0.8,
       maxSpacing: GAME_CONFIG.OBSTACLE_SPAWN_DISTANCE * 1.2,
@@ -162,9 +162,9 @@ export class GameEngine {
       minGapY: GAME_CONFIG.OBSTACLE_GAP / 2 + GAME_CONFIG.OBSTACLE_MIN_HEIGHT,
       maxGapY: GAME_CONFIG.CANVAS_HEIGHT - GAME_CONFIG.GROUND_HEIGHT - GAME_CONFIG.OBSTACLE_GAP / 2 - GAME_CONFIG.OBSTACLE_MIN_HEIGHT
     };
-    
+
     this.lastObstacleSpawnTime = 0;
-    
+
     // Initialize performance monitoring
     this.performanceMonitor = new PerformanceMonitor(
       {
@@ -219,7 +219,7 @@ export class GameEngine {
     try {
       this.canvas = canvas;
       this.context = canvas.getContext('2d');
-      
+
       if (!this.context) {
         throw new Error('Failed to get 2D rendering context from canvas');
       }
@@ -242,18 +242,18 @@ export class GameEngine {
       this.onQuestionUpdate = callbacks?.onQuestionUpdate;
       this.onMathScoreUpdate = callbacks?.onMathScoreUpdate;
       this.onFeedbackUpdate = callbacks?.onFeedbackUpdate;
-      
+
       // Apply mobile optimizations if needed
       const isMobile = callbacks?.isMobile ?? false;
       const scale = callbacks?.scale ?? 1;
-      
+
       if (isMobile || scale < 0.7) {
         this.applyMobileOptimizations();
       }
-      
+
       // Start performance monitoring
       this.performanceMonitor.start();
-      
+
     } catch (error) {
       this.handleError(error as Error, 'Failed to initialize game engine');
       throw error;
@@ -280,14 +280,14 @@ export class GameEngine {
 
       this.gameState.state = GameState.PLAYING;
       this.gameState.lastTime = performance.now();
-      
+
       // Initialize question sync manager with first question
       // Requirement 1.5: First question displayed before first obstacle appears
       this.questionSyncManager.initialize();
-      
+
       this.onGameStart?.();
       this.startGameLoop();
-      
+
     } catch (error) {
       this.handleError(error as Error, 'Failed to start game');
     }
@@ -317,10 +317,10 @@ export class GameEngine {
 
         // Continue the loop
         this.animationId = requestAnimationFrame(gameLoop);
-        
+
       } catch (error) {
         this.handleError(error as Error, 'Error in game loop');
-        
+
         // Try to recover by resetting the game state
         if (this.shouldAttemptRecovery()) {
           console.warn('Attempting to recover from game loop error');
@@ -349,11 +349,9 @@ export class GameEngine {
     // Update obstacles
     this.updateObstacles(deltaTime);
 
-    // Update nextObstacleX to move with obstacles (this is the key fix!)
-    if (deltaTime && !isNaN(deltaTime) && deltaTime > 0) {
-      const dt = deltaTime / 1000;
-      this.gameState.nextObstacleX -= GAME_CONFIG.OBSTACLE_SPEED * dt * 60;
-    }
+    // Update nextObstacleX based on the rightmost obstacle position
+    // This ensures proper spacing without causing premature generation
+    this.updateNextObstaclePosition();
 
     // Generate new obstacles
     this.generateObstacles();
@@ -397,23 +395,47 @@ export class GameEngine {
    */
   private updateObstacles(deltaTime: number): void {
     const beforePositions = this.gameState.obstacles.map(o => o.x);
-    
+
     for (const obstacle of this.gameState.obstacles) {
       obstacle.update(deltaTime);
     }
-    
+
     const afterPositions = this.gameState.obstacles.map(o => o.x);
-    
+
     // Debug logging for obstacle movement
     if (this.gameState.obstacles.length > 0) {
       console.log('DEBUG - updateObstacles:', {
         obstacleCount: this.gameState.obstacles.length,
         beforePositions: beforePositions.slice(0, 3), // Show first 3
         afterPositions: afterPositions.slice(0, 3), // Show first 3
-        movement: beforePositions.length > 0 && afterPositions.length > 0 ? 
+        movement: beforePositions.length > 0 && afterPositions.length > 0 ?
           (beforePositions[0] || 0) - (afterPositions[0] || 0) : 0
       });
     }
+  }
+
+  /**
+   * Update the next obstacle spawn position based on the rightmost obstacle
+   * This maintains proper spacing without causing premature generation
+   */
+  private updateNextObstaclePosition(): void {
+    if (this.gameState.obstacles.length === 0) {
+      // No obstacles yet, keep nextObstacleX at canvas width
+      this.gameState.nextObstacleX = GAME_CONFIG.CANVAS_WIDTH;
+      return;
+    }
+
+    // Find the rightmost obstacle
+    let rightmostX = -Infinity;
+    for (const obstacle of this.gameState.obstacles) {
+      if (obstacle.x > rightmostX) {
+        rightmostX = obstacle.x;
+      }
+    }
+
+    // Set nextObstacleX to be at the proper spacing distance from the rightmost obstacle
+    const minSpacing = this.obstacleGenerationConfig.minSpacing;
+    this.gameState.nextObstacleX = rightmostX + minSpacing;
   }
 
   /**
@@ -422,7 +444,7 @@ export class GameEngine {
    */
   private generateObstacles(): void {
     const currentTime = performance.now();
-    
+
     // Debug logging
     console.log('DEBUG - generateObstacles:', {
       nextObstacleX: this.gameState.nextObstacleX?.toFixed?.(2) || this.gameState.nextObstacleX,
@@ -432,7 +454,7 @@ export class GameEngine {
       obstaclePositions: this.gameState.obstacles.map(o => o.x?.toFixed?.(2) || o.x),
       currentQuestionLocked: this.questionSyncManager.isCurrentQuestionLocked()
     });
-    
+
     // Check if we need to spawn a new obstacle based on spacing
     if (this.gameState.nextObstacleX <= GAME_CONFIG.CANVAS_WIDTH) {
       // Ensure we have a locked question before creating obstacles
@@ -443,18 +465,18 @@ export class GameEngine {
 
       // Generate random spacing within configured range
       const spacing = this.generateRandomSpacing();
-      
+
       // Generate random gap configuration
       const gapConfig = this.generateRandomGapConfiguration();
-      
+
       // Create math obstacle with current locked question
       const mathObstacle = this.getMathObstacleFromPool(this.gameState.nextObstacleX, gapConfig.gapY);
-      
+
       // Configure the obstacle with random gap height
       mathObstacle.gapHeight = gapConfig.gapHeight;
       mathObstacle.gapY = gapConfig.gapY;
       mathObstacle.passed = false;
-      
+
       console.log('DEBUG - random gap config:', {
         gapHeight: gapConfig.gapHeight,
         gapY: gapConfig.gapY,
@@ -463,20 +485,20 @@ export class GameEngine {
         minGapY: this.obstacleGenerationConfig.minGapY,
         maxGapY: this.obstacleGenerationConfig.maxGapY
       });
-      
+
       // Add to active obstacles
       this.mathObstaclePool.active.push(mathObstacle);
       this.gameState.obstacles.push(mathObstacle);
-      
+
       // Update closest obstacle association after adding to obstacles list
       // Requirement 1.4: Only closest obstacle is associated with current question
       this.updateClosestObstacleAssociation();
-      
+
       // Update next obstacle position with random spacing
       const oldNextObstacleX = this.gameState.nextObstacleX;
       this.gameState.nextObstacleX += spacing;
       this.lastObstacleSpawnTime = currentTime;
-      
+
       console.log('DEBUG - math obstacle generated:', {
         obstacleX: mathObstacle.x,
         spacing: spacing,
@@ -486,11 +508,11 @@ export class GameEngine {
         question: this.currentQuestion?.question,
         obstacleId: (mathObstacle as any).id
       });
-      
+
 
     }
   }
-  
+
   /**
    * Generate random spacing between obstacles
    */
@@ -498,25 +520,25 @@ export class GameEngine {
     const { minSpacing, maxSpacing } = this.obstacleGenerationConfig;
     return Math.random() * (maxSpacing - minSpacing) + minSpacing;
   }
-  
+
   /**
    * Generate random gap configuration for obstacles
    */
   private generateRandomGapConfiguration(): { gapHeight: number; gapY: number } {
     const { minGapHeight, maxGapHeight, minGapY, maxGapY } = this.obstacleGenerationConfig;
-    
+
     // Generate random gap height
     const gapHeight = Math.random() * (maxGapHeight - minGapHeight) + minGapHeight;
-    
+
     // Generate random gap Y position, ensuring it fits within bounds
     const adjustedMinGapY = Math.max(minGapY, gapHeight / 2 + GAME_CONFIG.OBSTACLE_MIN_HEIGHT);
     const adjustedMaxGapY = Math.min(maxGapY, GAME_CONFIG.CANVAS_HEIGHT - GAME_CONFIG.GROUND_HEIGHT - gapHeight / 2 - GAME_CONFIG.OBSTACLE_MIN_HEIGHT);
-    
+
     const gapY = Math.random() * (adjustedMaxGapY - adjustedMinGapY) + adjustedMinGapY;
-    
+
     return { gapHeight, gapY };
   }
-  
+
   /**
    * Get obstacle from pool or create new one (object pooling for performance)
    */
@@ -530,7 +552,7 @@ export class GameEngine {
       }
       return obstacle;
     }
-    
+
     // Create new obstacle if pool is empty
     return new Obstacle(x, gapY);
   }
@@ -542,18 +564,18 @@ export class GameEngine {
   private getMathObstacleFromPool(x: number, gapY?: number): MathObstacle {
     // Get current question from sync manager (already locked)
     const currentQuestion = this.questionSyncManager.getCurrentQuestion();
-    
+
     if (!currentQuestion) {
       throw new Error('No current question available for obstacle creation');
     }
 
     // Create new math obstacle with current question
     const mathObstacle = new MathObstacle(x, currentQuestion, gapY);
-    
+
     // Generate unique obstacle ID for association tracking
     const obstacleId = `obstacle-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     (mathObstacle as any).id = obstacleId;
-    
+
     // Note: Association with closest obstacle will be handled after adding to obstacles list
     // This ensures proper distance calculation for closest obstacle determination
 
@@ -576,11 +598,18 @@ export class GameEngine {
 
     for (const obstacle of this.gameState.obstacles) {
       if (obstacle instanceof MathObstacle) {
+        // *** FIX STARTS HERE ***
+        // Skip obstacles that have already been answered to prevent incorrect re-association
+        if ((obstacle as any).hasBeenAnswered) {
+          continue;
+        }
+        // *** FIX ENDS HERE ***
+
         const obstacleId = (obstacle as any).id;
         if (obstacleId) {
           // Calculate distance from bird to obstacle
           const distance = Math.abs(obstacle.x - birdX);
-          
+
           // Only consider obstacles that are ahead of the bird
           if (obstacle.x > birdX && distance < closestDistance) {
             closestDistance = distance;
@@ -622,26 +651,26 @@ export class GameEngine {
     for (const obstacle of this.gameState.obstacles) {
       if (obstacle instanceof MathObstacle) {
         const obstacleId = (obstacle as any).id;
-        
+
         // CRITICAL FIX: Check if this obstacle has already been answered
         if ((obstacle as any).hasBeenAnswered) {
           continue; // Skip obstacles that have already been answered
         }
-        
+
         const selectedZone = obstacle.checkAnswerSelection(birdBounds);
-        
+
         if (selectedZone && !this.pendingAnswerValidation) {
           // Check if this obstacle is associated with the current question
           if (obstacleId && this.questionSyncManager.isObstacleAssociatedWithCurrentQuestion(obstacleId)) {
             // Mark this obstacle as answered to prevent multiple selections
             (obstacle as any).hasBeenAnswered = true;
-            
+
             // Store the answer selection for validation
             this.pendingAnswerValidation = { obstacle, zone: selectedZone };
-            
+
             // Process the answer immediately
             this.handleAnswerSelection(selectedZone.answer, selectedZone.isCorrect, obstacleId);
-            
+
             break; // Only process one answer selection per frame
           }
         }
@@ -685,7 +714,7 @@ export class GameEngine {
         // Update current question reference after change
         this.currentQuestion = this.questionSyncManager.getCurrentQuestion();
         this.gameState.currentQuestion = this.currentQuestion;
-        
+
         console.log('Question changed after obstacle interaction:', {
           newQuestion: this.currentQuestion?.question,
           obstacleId: obstacleId
@@ -714,7 +743,7 @@ export class GameEngine {
     }
 
     // Get all obstacle bounds for collision detection
-    const obstacleBounds: Bounds[][] = this.gameState.obstacles.map(obstacle => 
+    const obstacleBounds: Bounds[][] = this.gameState.obstacles.map(obstacle =>
       obstacle.getBounds()
     );
 
@@ -724,7 +753,7 @@ export class GameEngine {
     if (collisionResult.hasCollision) {
       // Create collision visual effects
       this.createCollisionEffects();
-      
+
       this.gameState.bird.kill();
       this.handleGameOver();
     }
@@ -743,7 +772,7 @@ export class GameEngine {
 
     // Trigger screen flash
     this.visualEffects.collisionFlashTime = ANIMATION_CONFIG.COLLISION_FLASH_DURATION;
-    
+
     // Trigger screen shake
     this.visualEffects.screenShakeIntensity = 5;
     this.visualEffects.screenShakeTime = 300;
@@ -792,7 +821,7 @@ export class GameEngine {
    */
   private cleanupObstacles(): void {
     const onScreenObstacles: Obstacle[] = [];
-    
+
     for (const obstacle of this.gameState.obstacles) {
       if (obstacle.isOffScreen()) {
         // Remove obstacle association from QuestionSyncManager
@@ -800,7 +829,7 @@ export class GameEngine {
         if (obstacleId) {
           this.questionSyncManager.removeObstacleAssociation(obstacleId);
         }
-        
+
         // Return obstacle to appropriate pool for reuse
         if (obstacle instanceof MathObstacle) {
           this.returnMathObstacleToPool(obstacle);
@@ -811,26 +840,26 @@ export class GameEngine {
         onScreenObstacles.push(obstacle);
       }
     }
-    
+
     this.gameState.obstacles = onScreenObstacles;
-    
+
     // Update active pools to match game state obstacles
     this.obstaclePool.active = this.gameState.obstacles.filter(o => !(o instanceof MathObstacle)) as Obstacle[];
     this.mathObstaclePool.active = this.gameState.obstacles.filter(o => o instanceof MathObstacle) as MathObstacle[];
   }
-  
+
   /**
    * Return obstacle to inactive pool for reuse
    */
   private returnObstacleToPool(obstacle: Obstacle): void {
     // Reset obstacle state
     obstacle.passed = false;
-    
+
     // Add to inactive pool if not already there and pool isn't too large
     if (!this.obstaclePool.inactive.includes(obstacle) && this.obstaclePool.inactive.length < 10) {
       this.obstaclePool.inactive.push(obstacle);
     }
-    
+
     // Remove from active pool
     const activeIndex = this.obstaclePool.active.indexOf(obstacle);
     if (activeIndex !== -1) {
@@ -844,10 +873,10 @@ export class GameEngine {
   private returnMathObstacleToPool(obstacle: MathObstacle): void {
     // Reset obstacle state
     obstacle.passed = false;
-    
+
     // FIXED: Reset the answered flag when cleaning up obstacles
     (obstacle as any).hasBeenAnswered = false;
-    
+
     // Note: Math obstacles contain questions, so we don't reuse them
     // as the question context changes. Just remove from active pool.
     const activeIndex = this.mathObstaclePool.active.indexOf(obstacle);
@@ -862,7 +891,7 @@ export class GameEngine {
    */
   private handleGameOver(): void {
     this.gameState.state = GameState.GAME_OVER;
-    
+
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
@@ -957,7 +986,7 @@ export class GameEngine {
     if (!this.context) return;
 
     const groundY = GAME_CONFIG.CANVAS_HEIGHT - GAME_CONFIG.GROUND_HEIGHT;
-    
+
     // Ground
     this.context.fillStyle = '#8B4513'; // Saddle brown
     this.context.fillRect(0, groundY, GAME_CONFIG.CANVAS_WIDTH, GAME_CONFIG.GROUND_HEIGHT);
@@ -991,7 +1020,7 @@ export class GameEngine {
 
     // Reset game state (this will reset all math tracking)
     this.gameState = this.createInitialState();
-    
+
     // Reset math system
     this.scoringSystem.reset();
     this.mathQuestionManager.resetPool();
@@ -999,7 +1028,7 @@ export class GameEngine {
     this.answerHandler.reset();
     this.currentQuestion = null;
     this.pendingAnswerValidation = null;
-    
+
     // Reset visual effects
     this.particleSystem.clear();
     this.visualEffects = {
@@ -1007,7 +1036,7 @@ export class GameEngine {
       screenShakeIntensity: 0,
       screenShakeTime: 0
     };
-    
+
     // Reset obstacle generation system
     this.resetObstacleGeneration();
 
@@ -1016,7 +1045,7 @@ export class GameEngine {
     this.onMathScoreUpdate?.(0, 0);
     this.onFeedbackUpdate?.(null);
   }
-  
+
   /**
    * Reset obstacle generation system
    */
@@ -1025,17 +1054,17 @@ export class GameEngine {
     for (const obstacle of this.obstaclePool.active) {
       this.returnObstacleToPool(obstacle);
     }
-    
+
     // Clear math obstacles (don't reuse due to question context)
     for (const obstacle of this.mathObstaclePool.active) {
       this.returnMathObstacleToPool(obstacle);
     }
-    
+
     // Clear active obstacles
     this.obstaclePool.active = [];
     this.mathObstaclePool.active = [];
     this.lastObstacleSpawnTime = 0;
-    
+
     // Reset next obstacle position to start at screen edge
     this.gameState.nextObstacleX = GAME_CONFIG.CANVAS_WIDTH;
   }
@@ -1046,7 +1075,7 @@ export class GameEngine {
   public pause(): void {
     if (this.gameState.state === GameState.PLAYING) {
       this.gameState.state = GameState.PAUSED;
-      
+
       if (this.animationId) {
         cancelAnimationFrame(this.animationId);
         this.animationId = null;
@@ -1155,7 +1184,7 @@ export class GameEngine {
   } {
     const totalActive = this.obstaclePool.active.length + this.mathObstaclePool.active.length;
     const totalInactive = this.obstaclePool.inactive.length + this.mathObstaclePool.inactive.length;
-    
+
     return {
       activeCount: totalActive,
       inactiveCount: totalInactive,
@@ -1179,7 +1208,7 @@ export class GameEngine {
     // This method is provided for testing purposes but maintains consistent spacing
     console.log(`Difficulty set to level ${level} - spacing remains consistent for educational focus`);
   }
-  
+
   /**
    * Force obstacle generation for testing purposes
    */
@@ -1190,7 +1219,7 @@ export class GameEngine {
       this.generateObstacles();
     }
   }
-  
+
   /**
    * Get obstacle pool for testing purposes
    */
@@ -1217,7 +1246,7 @@ export class GameEngine {
     // Clear all systems
     this.particleSystem.clear();
     this.answerHandler.reset();
-    
+
     // Clear callbacks to prevent memory leaks
     this.onScoreUpdate = undefined;
     this.onGameOver = undefined;
@@ -1238,68 +1267,68 @@ export class GameEngine {
    */
   private handleLowPerformance(metrics: PerformanceMetrics): void {
     console.warn('Low performance detected, applying optimizations:', metrics);
-    
+
     // Reduce particle effects
     if (!this.performanceOptimizations.reducedParticles) {
       this.particleSystem.setMaxParticles(Math.max(2, RESPONSIVE_CONFIG.MOBILE_PARTICLE_COUNT / 2));
       this.performanceOptimizations.reducedParticles = true;
     }
-    
+
     // Disable screen shake
     if (!this.performanceOptimizations.disabledScreenShake) {
       this.visualEffects.screenShakeIntensity = 0;
       this.visualEffects.screenShakeTime = 0;
       this.performanceOptimizations.disabledScreenShake = true;
     }
-    
+
     // Reduce visual effects
     if (!this.performanceOptimizations.reducedVisualEffects && metrics.averageFps < 30) {
       this.visualEffects.collisionFlashTime = 0;
       this.performanceOptimizations.reducedVisualEffects = true;
     }
   }
-  
+
   /**
    * Handle performance recovery by restoring effects
    */
   private handlePerformanceRecovered(metrics: PerformanceMetrics): void {
     console.log('Performance recovered, restoring effects:', metrics);
-    
+
     // Restore particle effects gradually
     if (this.performanceOptimizations.reducedParticles && metrics.averageFps > 50) {
       this.particleSystem.setMaxParticles(ANIMATION_CONFIG.PARTICLE_COUNT);
       this.performanceOptimizations.reducedParticles = false;
     }
-    
+
     // Re-enable screen shake
     if (this.performanceOptimizations.disabledScreenShake && metrics.averageFps > 45) {
       this.performanceOptimizations.disabledScreenShake = false;
     }
-    
+
     // Restore visual effects
     if (this.performanceOptimizations.reducedVisualEffects && metrics.averageFps > 40) {
       this.performanceOptimizations.reducedVisualEffects = false;
     }
   }
-  
+
   /**
    * Apply mobile-specific optimizations
    */
   private applyMobileOptimizations(): void {
     // Reduce particle count for mobile performance
     this.particleSystem.setMaxParticles(RESPONSIVE_CONFIG.MOBILE_PARTICLE_COUNT);
-    
+
     // Pre-apply some optimizations for mobile
     this.performanceOptimizations.reducedParticles = true;
   }
 
-  
+
   /**
    * Handle errors with rate limiting and recovery attempts
    */
   private handleError(error: Error, context: string): void {
     const currentTime = Date.now();
-    
+
     // Rate limit error reporting
     if (currentTime - this.lastErrorTime < 60000) {
       this.errorCount++;
@@ -1307,34 +1336,34 @@ export class GameEngine {
       this.errorCount = 1;
       this.lastErrorTime = currentTime;
     }
-    
+
     // Log error with context
     console.error(`Game Engine Error (${context}):`, error);
-    
+
     // Report to callback if available
     this.onError?.(error);
-    
+
     // If too many errors, stop trying to recover
     if (this.errorCount > this.maxErrorsPerMinute) {
       console.error('Too many errors detected, stopping game');
       this.handleGameOver();
     }
   }
-  
+
   /**
    * Determine if we should attempt error recovery
    */
   private shouldAttemptRecovery(): boolean {
     return this.errorCount < 3 && this.gameState.state === GameState.PLAYING;
   }
-  
+
   /**
    * Get current performance metrics
    */
   public getPerformanceMetrics(): PerformanceMetrics {
     return this.performanceMonitor.getCurrentMetrics();
   }
-  
+
   /**
    * Get performance optimization status
    */
@@ -1350,7 +1379,7 @@ export class GameEngine {
       recommendations: this.performanceMonitor.getOptimizationRecommendations(metrics)
     };
   }
-  
+
   /**
    * Force performance optimization for testing
    */

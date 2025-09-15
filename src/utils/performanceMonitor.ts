@@ -1,5 +1,5 @@
 /**
- * Performance monitoring utility for the Flappy Bird game
+ * Performance monitoring utility for the Brainy Bird game
  * Tracks frame rate, memory usage, and provides optimization recommendations
  */
 

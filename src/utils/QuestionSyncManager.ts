@@ -33,6 +33,7 @@ export class QuestionSyncManager {
    * Requirement 1.5: First question displayed before first obstacle appears
    */
   public initialize(): void {
+    console.log('DEBUG - QuestionSyncManager initializing... Stack trace:', new Error().stack);
     this.loadAndLockNextQuestion();
   }
 
@@ -53,6 +54,11 @@ export class QuestionSyncManager {
    */
   public unlockAndAdvance(): void {
     if (this.isQuestionLocked) {
+      const previousQuestion = this.currentQuestion?.question;
+      const previousId = this.currentQuestion?.id;
+      
+      console.log(`DEBUG - unlockAndAdvance() called for question: "${previousQuestion}" (ID: ${previousId})`);
+      
       this.isQuestionLocked = false;
       this.associatedObstacleId = null;
       
@@ -68,7 +74,9 @@ export class QuestionSyncManager {
       // Load and lock the next question
       this.loadAndLockNextQuestion();
       
-      console.log('Question unlocked and advanced to next question');
+      console.log(`DEBUG - Question unlocked and advanced: "${previousQuestion}" (ID: ${previousId}) -> "${this.currentQuestion?.question}" (ID: ${this.currentQuestion?.id})`);
+    } else {
+      console.log(`DEBUG - unlockAndAdvance() called but question is not locked`);
     }
   }
 
@@ -152,11 +160,15 @@ export class QuestionSyncManager {
    * Handle obstacle interaction - unlock and advance if it's the associated obstacle
    */
   public handleObstacleInteraction(obstacleId: string): boolean {
+    console.log(`DEBUG - handleObstacleInteraction called for obstacle: ${obstacleId}`);
     if (this.isObstacleAssociatedWithCurrentQuestion(obstacleId)) {
+      console.log(`DEBUG - Obstacle ${obstacleId} is associated with current question, advancing...`);
       this.unlockAndAdvance();
       return true;
+    } else {
+      console.log(`DEBUG - Obstacle ${obstacleId} is NOT associated with current question`);
+      return false;
     }
-    return false;
   }
 
   /**
@@ -199,13 +211,14 @@ export class QuestionSyncManager {
    */
   private loadAndLockNextQuestion(): void {
     try {
+      console.log(`DEBUG - loadAndLockNextQuestion() called - Stack trace:`, new Error().stack);
       this.currentQuestion = this.mathQuestionManager.getNextQuestion();
       this.lockCurrentQuestion();
       
       // Notify UI of question update
       this.onQuestionUpdate?.(this.currentQuestion);
       
-      console.log(`Loaded and locked question: ${this.currentQuestion.question}`);
+      console.log(`DEBUG - Loaded and locked question: ${this.currentQuestion.question} (ID: ${this.currentQuestion.id})`);
     } catch (error) {
       console.error('Failed to load next question:', error);
       this.currentQuestion = null;

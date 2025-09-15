@@ -133,7 +133,7 @@ Object.defineProperty(window, 'location', {
   writable: true
 });
 
-describe('Flappy Bird Game - End-to-End Tests', () => {
+describe('Brainy Bird Game - End-to-End Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -148,7 +148,7 @@ describe('Flappy Bird Game - End-to-End Tests', () => {
       render(<Game />);
 
       // 1. Initial state - game should show start screen
-      expect(screen.getByText('Flappy Bird')).toBeInTheDocument();
+      expect(screen.getByText('Brainy Bird')).toBeInTheDocument();
       expect(screen.getByText(/Tap the canvas or press spacebar to start/)).toBeInTheDocument();
       expect(screen.queryByTestId('score-display')).not.toBeInTheDocument();
       expect(screen.queryByTestId('game-over-screen')).not.toBeInTheDocument();

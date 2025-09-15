@@ -2,7 +2,7 @@ import { Bounds } from '../types';
 import { GAME_CONFIG, COLLISION } from './gameConfig';
 
 /**
- * Collision detection utilities for the Flappy Bird game
+ * Collision detection utilities for the Brainy Bird game
  */
 export class CollisionDetector {
   /**

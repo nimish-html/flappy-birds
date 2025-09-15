@@ -175,7 +175,7 @@ describe('Math Game Accessibility Tests', () => {
 
       // Check visual hierarchy of game elements
       const gameElements = {
-        title: screen.queryByText('Flappy Bird'),
+        title: screen.queryByText('Brainy Bird'),
         instruction: screen.queryByText(/Keep flying!/),
         score: screen.queryAllByText(/Score:/),
         question: screen.queryAllByText(/\d+\s*[\+\-\×\÷]\s*\d+/)

@@ -131,7 +131,7 @@ export default function Game() {
         {/* Game Title */}
         <div className="text-center mb-4 sm:mb-6">
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-2 drop-shadow-lg">
-            Math Bird
+            Brainy Bird
           </h1>
           <p className="text-blue-100 text-sm sm:text-lg px-2">
             {!gameState.hasStarted 
