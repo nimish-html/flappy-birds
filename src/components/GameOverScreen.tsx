@@ -2,8 +2,19 @@
 
 import React from 'react';
 
+export interface GameOverData {
+  score: number;
+  mathScore: number;
+  streak: number;
+  highestStreak: number;
+  totalCorrect: number;
+  totalIncorrect: number;
+  accuracy: number;
+}
+
 interface GameOverScreenProps {
   score: number;
+  mathData?: GameOverData;
   onRestart: () => void;
   isVisible: boolean;
   className?: string;
@@ -11,6 +22,7 @@ interface GameOverScreenProps {
 
 export const GameOverScreen: React.FC<GameOverScreenProps> = ({
   score,
+  mathData,
   onRestart,
   isVisible,
   className = ''
@@ -63,7 +75,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
         </div>
 
         {/* Final Score Display */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <p className="text-lg text-gray-600 mb-2">Final Score</p>
           <div 
             className="
@@ -79,6 +91,59 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
             {score}
           </div>
         </div>
+
+        {/* Math Performance Stats */}
+        {mathData && (mathData.totalCorrect > 0 || mathData.totalIncorrect > 0) && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3 text-center">
+              Math Performance
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {/* Math Score */}
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600" data-testid="math-score">
+                  {mathData.mathScore}
+                </div>
+                <div className="text-gray-600">Math Points</div>
+              </div>
+              
+              {/* Best Streak */}
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600" data-testid="best-streak">
+                  {mathData.highestStreak}
+                </div>
+                <div className="text-gray-600">Best Streak</div>
+              </div>
+              
+              {/* Correct Answers */}
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-500" data-testid="correct-answers">
+                  {mathData.totalCorrect}
+                </div>
+                <div className="text-gray-600">Correct</div>
+              </div>
+              
+              {/* Incorrect Answers */}
+              <div className="text-center">
+                <div className="text-xl font-bold text-red-500" data-testid="incorrect-answers">
+                  {mathData.totalIncorrect}
+                </div>
+                <div className="text-gray-600">Incorrect</div>
+              </div>
+            </div>
+            
+            {/* Accuracy */}
+            {(mathData.totalCorrect + mathData.totalIncorrect) > 0 && (
+              <div className="mt-4 text-center">
+                <div className="text-lg font-semibold text-purple-600" data-testid="accuracy">
+                  {mathData.accuracy}%
+                </div>
+                <div className="text-gray-600 text-sm">Accuracy</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Restart Button */}
         <div className="text-center">

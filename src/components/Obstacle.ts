@@ -42,6 +42,11 @@ export class Obstacle {
    * @param deltaTime - Time elapsed since last update in milliseconds
    */
   public update(deltaTime: number): void {
+    // Safety check for valid deltaTime
+    if (!deltaTime || isNaN(deltaTime) || deltaTime <= 0) {
+      return;
+    }
+    
     // Convert deltaTime from milliseconds to seconds for consistent movement
     const dt = deltaTime / 1000;
     

@@ -28,7 +28,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       expect(screen.queryByText(/Final Score:/)).not.toBeInTheDocument();
 
       // 2. Find and interact with the game canvas
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       expect(gameCanvas).toBeInTheDocument();
 
       // 3. Start the game by clicking the canvas
@@ -79,7 +79,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       render(<Game />);
 
       // Start game with spacebar
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       gameCanvas.focus();
       await user.keyboard(' ');
 
@@ -110,7 +110,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       render(<Game />);
 
       // Start game
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       await user.click(gameCanvas);
 
       // Wait for game to start and score to appear
@@ -150,7 +150,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       const user = userEvent.setup();
       render(<Game />);
 
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       
       // Start game
       await user.click(gameCanvas);
@@ -178,7 +178,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       const user = userEvent.setup();
       render(<Game />);
 
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
 
       // Start with mouse click
       await user.click(gameCanvas);
@@ -211,7 +211,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       expect(screen.getByText(/Tap the canvas or press spacebar to start/)).toBeInTheDocument();
 
       // Start game
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       await user.click(gameCanvas);
 
       // Playing state feedback
@@ -251,7 +251,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       stateChanges.push('initial');
 
       // Start game
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       await user.click(gameCanvas);
 
       await waitFor(() => {
@@ -291,7 +291,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       render(<Game />);
 
       // Start and play game
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       await user.click(gameCanvas);
 
       await waitFor(() => {
@@ -321,7 +321,7 @@ describe('Flappy Bird Game - Complete End-to-End Tests', () => {
       const user = userEvent.setup();
       render(<Game />);
 
-      const gameCanvas = screen.getByLabelText(/Flappy Bird Game Canvas/);
+      const gameCanvas = screen.getByLabelText(/Math Bird Game Canvas/);
       
       // Start game
       await user.click(gameCanvas);

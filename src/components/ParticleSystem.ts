@@ -20,10 +20,12 @@ export class ParticleSystem {
    * @param x - X position for particle spawn
    * @param y - Y position for particle spawn
    * @param color - Color of the particles
+   * @param count - Number of particles to create (optional, defaults to maxParticles)
    */
-  public createCollisionParticles(x: number, y: number, color: string = '#FFD700'): void {
-    for (let i = 0; i < this.maxParticles; i++) {
-      const angle = (Math.PI * 2 * i) / ANIMATION_CONFIG.PARTICLE_COUNT;
+  public createCollisionParticles(x: number, y: number, color: string = '#FFD700', count?: number): void {
+    const particleCount = count ?? this.maxParticles;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount;
       const speed = ANIMATION_CONFIG.PARTICLE_SPEED + Math.random() * 2;
       
       const particle: Particle = {

@@ -94,7 +94,7 @@ describe('GameCanvas', () => {
     it('should render canvas element with correct dimensions', () => {
       render(<GameCanvas width={800} height={600} />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toBeInTheDocument();
       expect(canvas).toHaveAttribute('width', '800');
       expect(canvas).toHaveAttribute('height', '600');
@@ -103,7 +103,7 @@ describe('GameCanvas', () => {
     it('should use default dimensions when not provided', () => {
       render(<GameCanvas />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveAttribute('width', '800'); // GAME_CONFIG.CANVAS_WIDTH
       expect(canvas).toHaveAttribute('height', '600'); // GAME_CONFIG.CANVAS_HEIGHT
     });
@@ -163,7 +163,7 @@ describe('GameCanvas', () => {
         expect(mockInitialize).toHaveBeenCalled();
       });
 
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       
       act(() => {
         fireEvent.click(canvas);
@@ -263,7 +263,7 @@ describe('GameCanvas', () => {
         throw new Error('Input error');
       });
 
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       
       act(() => {
         fireEvent.click(canvas);
@@ -361,29 +361,29 @@ describe('GameCanvas', () => {
     it('should have proper accessibility attributes', () => {
       render(<GameCanvas />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveAttribute('tabIndex', '0');
-      expect(canvas).toHaveAttribute('aria-label', expect.stringContaining('Flappy Bird Game Canvas'));
+      expect(canvas).toHaveAttribute('aria-label', expect.stringContaining('Math Bird Game Canvas'));
     });
 
     it('should apply custom className', () => {
       render(<GameCanvas className="custom-class" />);
       
-      const container = screen.getByLabelText(/flappy bird game canvas/i).parentElement;
+      const container = screen.getByLabelText(/math bird game canvas/i).parentElement;
       expect(container).toHaveClass('custom-class');
     });
 
     it('should have focus styles', () => {
       render(<GameCanvas />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveClass('focus:outline-none', 'focus:ring-2', 'focus:ring-blue-500');
     });
 
     it('should be responsive', () => {
       render(<GameCanvas />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveStyle({ maxWidth: '100%', height: 'auto' });
     });
   });
@@ -445,7 +445,7 @@ describe('GameCanvas', () => {
 
       render(<GameCanvas enableResponsive={true} />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveAttribute('width', '400');
       expect(canvas).toHaveAttribute('height', '300');
     });
@@ -453,7 +453,7 @@ describe('GameCanvas', () => {
     it('should use fixed dimensions when responsive is disabled', async () => {
       render(<GameCanvas enableResponsive={false} width={800} height={600} />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveAttribute('width', '800');
       expect(canvas).toHaveAttribute('height', '600');
     });
@@ -491,7 +491,7 @@ describe('GameCanvas', () => {
 
       render(<GameCanvas enableResponsive={true} />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).toHaveClass('touch-manipulation');
     });
 
@@ -521,7 +521,7 @@ describe('GameCanvas', () => {
 
       render(<GameCanvas enableResponsive={true} />);
       
-      const canvas = screen.getByLabelText(/flappy bird game canvas/i);
+      const canvas = screen.getByLabelText(/math bird game canvas/i);
       expect(canvas).not.toHaveClass('touch-manipulation');
     });
   });

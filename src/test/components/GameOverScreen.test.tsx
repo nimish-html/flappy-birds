@@ -1,13 +1,23 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { GameOverScreen } from '../../components/GameOverScreen';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { GameOverScreen, GameOverData } from '../../components/GameOverScreen';
 
 describe('GameOverScreen', () => {
   const defaultProps = {
     score: 10,
     onRestart: vi.fn(),
     isVisible: true,
+  };
+
+  const mockMathData: GameOverData = {
+    score: 10,
+    mathScore: 85,
+    streak: 5,
+    highestStreak: 5,
+    totalCorrect: 8,
+    totalIncorrect: 2,
+    accuracy: 80.0
   };
 
   beforeEach(() => {
@@ -205,6 +215,108 @@ describe('GameOverScreen', () => {
       // Check for button
       const button = screen.getByRole('button');
       expect(button).toHaveTextContent('Play Again');
+    });
+  });
+
+  describe('Math Performance Display', () => {
+    it('should display math performance stats when mathData is provided', () => {
+      render(<GameOverScreen {...defaultProps} mathData={mockMathData} />);
+      
+      expect(screen.getByText('Math Performance')).toBeInTheDocument();
+      expect(screen.getByTestId('math-score')).toHaveTextContent('85');
+      expect(screen.getByTestId('best-streak')).toHaveTextContent('5');
+      expect(screen.getByTestId('correct-answers')).toHaveTextContent('8');
+      expect(screen.getByTestId('incorrect-answers')).toHaveTextContent('2');
+      expect(screen.getByTestId('accuracy')).toHaveTextContent('80%');
+    });
+
+    it('should not display math performance stats when no answers were given', () => {
+      const noAnswersMathData: GameOverData = {
+        ...mockMathData,
+        totalCorrect: 0,
+        totalIncorrect: 0
+      };
+      
+      render(<GameOverScreen {...defaultProps} mathData={noAnswersMathData} />);
+      
+      expect(screen.queryByText('Math Performance')).not.toBeInTheDocument();
+    });
+
+    it('should display math performance stats when only correct answers were given', () => {
+      const onlyCorrectMathData: GameOverData = {
+        ...mockMathData,
+        totalCorrect: 5,
+        totalIncorrect: 0,
+        accuracy: 100.0
+      };
+      
+      render(<GameOverScreen {...defaultProps} mathData={onlyCorrectMathData} />);
+      
+      expect(screen.getByText('Math Performance')).toBeInTheDocument();
+      expect(screen.getByTestId('correct-answers')).toHaveTextContent('5');
+      expect(screen.getByTestId('incorrect-answers')).toHaveTextContent('0');
+      expect(screen.getByTestId('accuracy')).toHaveTextContent('100%');
+    });
+
+    it('should display math performance stats when only incorrect answers were given', () => {
+      const onlyIncorrectMathData: GameOverData = {
+        ...mockMathData,
+        totalCorrect: 0,
+        totalIncorrect: 3,
+        accuracy: 0.0,
+        mathScore: 0,
+        streak: 0
+      };
+      
+      render(<GameOverScreen {...defaultProps} mathData={onlyIncorrectMathData} />);
+      
+      expect(screen.getByText('Math Performance')).toBeInTheDocument();
+      expect(screen.getByTestId('correct-answers')).toHaveTextContent('0');
+      expect(screen.getByTestId('incorrect-answers')).toHaveTextContent('3');
+      expect(screen.getByTestId('accuracy')).toHaveTextContent('0%');
+      expect(screen.getByTestId('math-score')).toHaveTextContent('0');
+    });
+
+    it('should handle decimal accuracy correctly', () => {
+      const decimalAccuracyMathData: GameOverData = {
+        ...mockMathData,
+        totalCorrect: 2,
+        totalIncorrect: 1,
+        accuracy: 66.7
+      };
+      
+      render(<GameOverScreen {...defaultProps} mathData={decimalAccuracyMathData} />);
+      
+      expect(screen.getByTestId('accuracy')).toHaveTextContent('66.7%');
+    });
+
+    it('should handle high streak values correctly', () => {
+      const highStreakMathData: GameOverData = {
+        ...mockMathData,
+        streak: 15,
+        highestStreak: 15
+      };
+      
+      render(<GameOverScreen {...defaultProps} mathData={highStreakMathData} />);
+      
+      expect(screen.getByTestId('best-streak')).toHaveTextContent('15');
+    });
+
+    it('should handle negative math scores correctly', () => {
+      const negativeMathData: GameOverData = {
+        ...mockMathData,
+        mathScore: -10
+      };
+      
+      render(<GameOverScreen {...defaultProps} mathData={negativeMathData} />);
+      
+      expect(screen.getByTestId('math-score')).toHaveTextContent('-10');
+    });
+
+    it('should not display math performance when mathData is not provided', () => {
+      render(<GameOverScreen {...defaultProps} />);
+      
+      expect(screen.queryByText('Math Performance')).not.toBeInTheDocument();
     });
   });
 });

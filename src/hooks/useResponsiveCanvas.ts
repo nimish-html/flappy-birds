@@ -87,6 +87,11 @@ export const useResponsiveCanvas = (options: ResponsiveCanvasOptions = {}) => {
     dimensions,
     isMobile,
     isSmallScreen: dimensions.scale < 0.7,
-    isLargeScreen: dimensions.scale > 1.2
+    isLargeScreen: dimensions.scale > 1.2,
+    // Performance optimization helpers
+    shouldReduceEffects: dimensions.scale < 0.6 || isMobile,
+    shouldEnhanceEffects: dimensions.scale > 1.3 && !isMobile,
+    touchFriendlySize: isMobile ? 1.2 : 1.0, // Scale factor for touch elements
+    performanceLevel: dimensions.scale < 0.5 ? 'low' : dimensions.scale < 0.8 ? 'medium' : 'high'
   };
 };

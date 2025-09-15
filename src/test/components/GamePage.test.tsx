@@ -83,8 +83,8 @@ describe('Game Page Integration', () => {
   it('renders the main game page with title and instructions', () => {
     render(<Game />);
     
-    expect(screen.getByText('Flappy Bird')).toBeInTheDocument();
-    expect(screen.getByText('Click the canvas or press spacebar to start!')).toBeInTheDocument();
+    expect(screen.getByText('Math Bird')).toBeInTheDocument();
+    expect(screen.getByText('Answer math questions by flying through the correct path!')).toBeInTheDocument();
     expect(screen.getByText('How to Play:')).toBeInTheDocument();
   });
 
@@ -175,7 +175,7 @@ describe('Game Page Integration', () => {
     render(<Game />);
     
     // Initially shows start message
-    expect(screen.getByText('Click the canvas or press spacebar to start!')).toBeInTheDocument();
+    expect(screen.getByText('Answer math questions by flying through the correct path!')).toBeInTheDocument();
 
     // Wait for game to start and status to change
     await waitFor(() => {
@@ -208,7 +208,7 @@ describe('Game Page Integration', () => {
 
     // Wait for game over and check for restart instruction
     await waitFor(() => {
-      expect(screen.getByText(/Press 'R' or click "Play Again" to restart/)).toBeInTheDocument();
+      expect(screen.getByText(/Press 'R' or tap "Play Again" to restart/)).toBeInTheDocument();
     }, { timeout: 1000 });
   });
 
@@ -271,7 +271,7 @@ describe('Game Page Integration', () => {
     render(<Game />);
     
     // Initial state
-    expect(screen.getByText('Click the canvas or press spacebar to start!')).toBeInTheDocument();
+    expect(screen.getByText('Answer math questions by flying through the correct path!')).toBeInTheDocument();
     
     // After game starts
     await waitFor(() => {

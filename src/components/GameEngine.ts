@@ -1,15 +1,30 @@
 import { Bird } from './Bird';
 import { Obstacle } from './Obstacle';
+import { MathObstacle } from './MathObstacle';
 import { ParticleSystem } from './ParticleSystem';
 import { GAME_CONFIG, ANIMATION_CONFIG, RESPONSIVE_CONFIG } from '../utils/gameConfig';
 import { PerformanceMonitor, PerformanceMetrics } from '../utils/performanceMonitor';
-import { Bounds } from '../types';
+import { MathQuestionManager } from '../utils/MathQuestionManager';
+import { QuestionSyncManager } from '../utils/QuestionSyncManager';
+import { ScoringSystem } from '../utils/ScoringSystem';
+import { AnswerHandler, AnswerFeedback } from '../utils/AnswerHandler';
+import { Bounds, MathQuestion, AnswerZone } from '../types';
 
 export enum GameState {
   MENU = 'menu',
   PLAYING = 'playing',
   GAME_OVER = 'game_over',
   PAUSED = 'paused'
+}
+
+export interface GameOverData {
+  score: number;
+  mathScore: number;
+  streak: number;
+  highestStreak: number;
+  totalCorrect: number;
+  totalIncorrect: number;
+  accuracy: number;
 }
 
 export interface GameEngineState {
@@ -19,11 +34,21 @@ export interface GameEngineState {
   obstacles: Obstacle[];
   lastTime: number;
   nextObstacleX: number;
+  currentQuestion: MathQuestion | null;
+  mathScore: number;
+  streak: number;
+  totalCorrect: number;
+  totalIncorrect: number;
 }
 
 interface ObstaclePool {
   active: Obstacle[];
   inactive: Obstacle[];
+}
+
+interface MathObstaclePool {
+  active: MathObstacle[];
+  inactive: MathObstacle[];
 }
 
 interface ObstacleGenerationConfig {
@@ -47,9 +72,20 @@ export class GameEngine {
   private canvas: HTMLCanvasElement | null = null;
   private context: CanvasRenderingContext2D | null = null;
   private onScoreUpdate?: (score: number) => void;
-  private onGameOver?: () => void;
+  private onGameOver?: (gameOverData: GameOverData) => void;
   private onGameStart?: () => void;
   private onError?: (error: Error) => void;
+  private onQuestionUpdate?: (question: MathQuestion | null) => void;
+  private onMathScoreUpdate?: (score: number, streak: number) => void;
+  private onFeedbackUpdate?: (feedback: AnswerFeedback | null) => void;
+  
+  // Math system
+  private mathQuestionManager: MathQuestionManager;
+  private questionSyncManager: QuestionSyncManager;
+  private scoringSystem: ScoringSystem;
+  private answerHandler: AnswerHandler;
+  private currentQuestion: MathQuestion | null = null;
+  private pendingAnswerValidation: { obstacle: MathObstacle; zone: AnswerZone } | null = null;
   
   // Visual effects
   private particleSystem: ParticleSystem;
@@ -57,6 +93,7 @@ export class GameEngine {
   
   // Obstacle generation system
   private obstaclePool: ObstaclePool;
+  private mathObstaclePool: MathObstaclePool;
   private obstacleGenerationConfig: ObstacleGenerationConfig;
   private lastObstacleSpawnTime: number = 0;
   
@@ -77,17 +114,42 @@ export class GameEngine {
   private lastErrorTime = 0;
   private readonly maxErrorsPerMinute = 10;
 
-  constructor() {
+  constructor(canvas?: HTMLCanvasElement) {
     this.gameState = this.createInitialState();
     this.particleSystem = new ParticleSystem();
+    
+    // Initialize with canvas if provided
+    if (canvas) {
+      this.canvas = canvas;
+      this.context = canvas.getContext('2d');
+    }
     this.visualEffects = {
       collisionFlashTime: 0,
       screenShakeIntensity: 0,
       screenShakeTime: 0
     };
     
+    // Initialize math system
+    this.mathQuestionManager = new MathQuestionManager();
+    this.questionSyncManager = new QuestionSyncManager(this.mathQuestionManager, {
+      onQuestionUpdate: (question) => this.handleQuestionUpdate(question)
+    });
+    this.scoringSystem = new ScoringSystem();
+    this.answerHandler = new AnswerHandler(
+      this.scoringSystem, 
+      this.particleSystem,
+      {
+        onFeedbackUpdate: (feedback) => this.onFeedbackUpdate?.(feedback)
+      }
+    );
+    
     // Initialize obstacle generation system
     this.obstaclePool = {
+      active: [],
+      inactive: []
+    };
+    
+    this.mathObstaclePool = {
       active: [],
       inactive: []
     };
@@ -128,7 +190,12 @@ export class GameEngine {
       bird: new Bird(),
       obstacles: [],
       lastTime: 0,
-      nextObstacleX: GAME_CONFIG.CANVAS_WIDTH // Start with first obstacle at screen edge
+      nextObstacleX: GAME_CONFIG.CANVAS_WIDTH, // Start with first obstacle at screen edge
+      currentQuestion: null,
+      mathScore: 0,
+      streak: 0,
+      totalCorrect: 0,
+      totalIncorrect: 0
     };
   }
 
@@ -139,9 +206,12 @@ export class GameEngine {
     canvas: HTMLCanvasElement,
     callbacks?: {
       onScoreUpdate?: (score: number) => void;
-      onGameOver?: () => void;
+      onGameOver?: (gameOverData: GameOverData) => void;
       onGameStart?: () => void;
       onError?: (error: Error) => void;
+      onQuestionUpdate?: (question: MathQuestion | null) => void;
+      onMathScoreUpdate?: (score: number, streak: number) => void;
+      onFeedbackUpdate?: (feedback: AnswerFeedback | null) => void;
       isMobile?: boolean;
       scale?: number;
     }
@@ -169,6 +239,9 @@ export class GameEngine {
       this.onGameOver = callbacks?.onGameOver;
       this.onGameStart = callbacks?.onGameStart;
       this.onError = callbacks?.onError;
+      this.onQuestionUpdate = callbacks?.onQuestionUpdate;
+      this.onMathScoreUpdate = callbacks?.onMathScoreUpdate;
+      this.onFeedbackUpdate = callbacks?.onFeedbackUpdate;
       
       // Apply mobile optimizations if needed
       const isMobile = callbacks?.isMobile ?? false;
@@ -188,6 +261,15 @@ export class GameEngine {
   }
 
   /**
+   * Handle question updates from QuestionSyncManager
+   */
+  private handleQuestionUpdate(question: MathQuestion | null): void {
+    this.currentQuestion = question;
+    this.gameState.currentQuestion = question;
+    this.onQuestionUpdate?.(question);
+  }
+
+  /**
    * Start the game and begin the game loop
    */
   public start(): void {
@@ -198,6 +280,10 @@ export class GameEngine {
 
       this.gameState.state = GameState.PLAYING;
       this.gameState.lastTime = performance.now();
+      
+      // Initialize question sync manager with first question
+      // Requirement 1.5: First question displayed before first obstacle appears
+      this.questionSyncManager.initialize();
       
       this.onGameStart?.();
       this.startGameLoop();
@@ -264,11 +350,20 @@ export class GameEngine {
     this.updateObstacles(deltaTime);
 
     // Update nextObstacleX to move with obstacles (this is the key fix!)
-    const dt = deltaTime / 1000;
-    this.gameState.nextObstacleX -= GAME_CONFIG.OBSTACLE_SPEED * dt * 60;
+    if (deltaTime && !isNaN(deltaTime) && deltaTime > 0) {
+      const dt = deltaTime / 1000;
+      this.gameState.nextObstacleX -= GAME_CONFIG.OBSTACLE_SPEED * dt * 60;
+    }
 
     // Generate new obstacles
     this.generateObstacles();
+
+    // Update closest obstacle association as obstacles move
+    // Requirement 1.4: Only closest obstacle is associated with current question
+    this.updateClosestObstacleAssociation();
+
+    // Check answer selection before collision detection
+    this.checkAnswerSelection();
 
     // Check collisions
     this.checkCollisions();
@@ -284,6 +379,9 @@ export class GameEngine {
 
     // Update particle system
     this.particleSystem.update(deltaTime);
+
+    // Update answer feedback timing
+    this.answerHandler.updateFeedback(this.gameState.lastTime);
 
     // Create jump particles if bird just jumped
     if (this.gameState.bird.hasJustJumped()) {
@@ -312,41 +410,50 @@ export class GameEngine {
         obstacleCount: this.gameState.obstacles.length,
         beforePositions: beforePositions.slice(0, 3), // Show first 3
         afterPositions: afterPositions.slice(0, 3), // Show first 3
-        movement: beforePositions.length > 0 ? beforePositions[0] - afterPositions[0] : 0
+        movement: beforePositions.length > 0 && afterPositions.length > 0 ? 
+          (beforePositions[0] || 0) - (afterPositions[0] || 0) : 0
       });
     }
   }
 
   /**
    * Generate new obstacles with proper spacing and random heights
+   * Requirement 1.2: New obstacles are paired with current displayed question
    */
   private generateObstacles(): void {
     const currentTime = performance.now();
     
     // Debug logging
     console.log('DEBUG - generateObstacles:', {
-      nextObstacleX: this.gameState.nextObstacleX.toFixed(2),
+      nextObstacleX: this.gameState.nextObstacleX?.toFixed?.(2) || this.gameState.nextObstacleX,
       canvasWidth: GAME_CONFIG.CANVAS_WIDTH,
       condition: this.gameState.nextObstacleX <= GAME_CONFIG.CANVAS_WIDTH,
       obstacleCount: this.gameState.obstacles.length,
-      obstaclePositions: this.gameState.obstacles.map(o => o.x.toFixed(2))
+      obstaclePositions: this.gameState.obstacles.map(o => o.x?.toFixed?.(2) || o.x),
+      currentQuestionLocked: this.questionSyncManager.isCurrentQuestionLocked()
     });
     
     // Check if we need to spawn a new obstacle based on spacing
     if (this.gameState.nextObstacleX <= GAME_CONFIG.CANVAS_WIDTH) {
+      // Ensure we have a locked question before creating obstacles
+      if (!this.questionSyncManager.isCurrentQuestionLocked()) {
+        console.warn('Cannot generate obstacle: no locked question available');
+        return;
+      }
+
       // Generate random spacing within configured range
       const spacing = this.generateRandomSpacing();
       
       // Generate random gap configuration
       const gapConfig = this.generateRandomGapConfiguration();
       
-      // Get obstacle from pool or create new one
-      const obstacle = this.getObstacleFromPool(this.gameState.nextObstacleX, gapConfig.gapY);
+      // Create math obstacle with current locked question
+      const mathObstacle = this.getMathObstacleFromPool(this.gameState.nextObstacleX, gapConfig.gapY);
       
       // Configure the obstacle with random gap height
-      obstacle.gapHeight = gapConfig.gapHeight;
-      obstacle.gapY = gapConfig.gapY;
-      obstacle.passed = false;
+      mathObstacle.gapHeight = gapConfig.gapHeight;
+      mathObstacle.gapY = gapConfig.gapY;
+      mathObstacle.passed = false;
       
       console.log('DEBUG - random gap config:', {
         gapHeight: gapConfig.gapHeight,
@@ -358,21 +465,29 @@ export class GameEngine {
       });
       
       // Add to active obstacles
-      this.obstaclePool.active.push(obstacle);
-      this.gameState.obstacles.push(obstacle);
+      this.mathObstaclePool.active.push(mathObstacle);
+      this.gameState.obstacles.push(mathObstacle);
+      
+      // Update closest obstacle association after adding to obstacles list
+      // Requirement 1.4: Only closest obstacle is associated with current question
+      this.updateClosestObstacleAssociation();
       
       // Update next obstacle position with random spacing
       const oldNextObstacleX = this.gameState.nextObstacleX;
       this.gameState.nextObstacleX += spacing;
       this.lastObstacleSpawnTime = currentTime;
       
-      console.log('DEBUG - obstacle generated:', {
-        obstacleX: obstacle.x,
+      console.log('DEBUG - math obstacle generated:', {
+        obstacleX: mathObstacle.x,
         spacing: spacing,
         oldNextObstacleX: oldNextObstacleX,
         newNextObstacleX: this.gameState.nextObstacleX,
-        canvasWidth: GAME_CONFIG.CANVAS_WIDTH
+        canvasWidth: GAME_CONFIG.CANVAS_WIDTH,
+        question: this.currentQuestion?.question,
+        obstacleId: (mathObstacle as any).id
       });
+      
+
     }
   }
   
@@ -419,6 +534,164 @@ export class GameEngine {
     // Create new obstacle if pool is empty
     return new Obstacle(x, gapY);
   }
+
+  /**
+   * Get math obstacle from pool or create new one with current question
+   * Requirement 1.2: New obstacles are paired with current displayed question
+   */
+  private getMathObstacleFromPool(x: number, gapY?: number): MathObstacle {
+    // Get current question from sync manager (already locked)
+    const currentQuestion = this.questionSyncManager.getCurrentQuestion();
+    
+    if (!currentQuestion) {
+      throw new Error('No current question available for obstacle creation');
+    }
+
+    // Create new math obstacle with current question
+    const mathObstacle = new MathObstacle(x, currentQuestion, gapY);
+    
+    // Generate unique obstacle ID for association tracking
+    const obstacleId = `obstacle-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    (mathObstacle as any).id = obstacleId;
+    
+    // Note: Association with closest obstacle will be handled after adding to obstacles list
+    // This ensures proper distance calculation for closest obstacle determination
+
+    return mathObstacle;
+  }
+
+  /**
+   * Update the closest obstacle association with the current question
+   * Requirement 1.4: Only closest obstacle is associated with current question
+   */
+  private updateClosestObstacleAssociation(): void {
+    if (!this.questionSyncManager.isCurrentQuestionLocked()) {
+      return;
+    }
+
+    // Find the closest obstacle to the bird
+    let closestObstacle: MathObstacle | null = null;
+    let closestDistance = Infinity;
+    const birdX = this.gameState.bird.x;
+
+    for (const obstacle of this.gameState.obstacles) {
+      if (obstacle instanceof MathObstacle) {
+        const obstacleId = (obstacle as any).id;
+        if (obstacleId) {
+          // Calculate distance from bird to obstacle
+          const distance = Math.abs(obstacle.x - birdX);
+          
+          // Only consider obstacles that are ahead of the bird
+          if (obstacle.x > birdX && distance < closestDistance) {
+            closestDistance = distance;
+            closestObstacle = obstacle;
+          }
+        }
+      }
+    }
+
+    // Associate the closest obstacle with the current question
+    if (closestObstacle) {
+      const obstacleId = (closestObstacle as any).id;
+      if (obstacleId) {
+        this.questionSyncManager.associateWithClosestObstacle(obstacleId);
+        console.log(`Updated closest obstacle association: ${obstacleId} at distance ${closestDistance.toFixed(2)}`);
+      }
+    }
+  }
+
+  /**
+   * Check for answer selection when bird passes through answer zones
+   * Requirement 2.4: Detect which answer was chosen
+   */
+  private checkAnswerSelection(): void {
+    if (!this.gameState.bird.alive) {
+      return;
+    }
+
+    const birdBounds = {
+      x: this.gameState.bird.x,
+      y: this.gameState.bird.y,
+      width: this.gameState.bird.width,
+      height: this.gameState.bird.height
+    };
+
+    // Check each math obstacle for answer selection
+    for (const obstacle of this.gameState.obstacles) {
+      if (obstacle instanceof MathObstacle) {
+        const selectedZone = obstacle.checkAnswerSelection(birdBounds);
+        
+        if (selectedZone && !this.pendingAnswerValidation) {
+          // Check if this obstacle is associated with the current question
+          const obstacleId = (obstacle as any).id;
+          if (obstacleId && this.questionSyncManager.isObstacleAssociatedWithCurrentQuestion(obstacleId)) {
+            // Store the answer selection for validation
+            this.pendingAnswerValidation = { obstacle, zone: selectedZone };
+            
+            // Process the answer immediately
+            this.handleAnswerSelection(selectedZone.answer, selectedZone.isCorrect, obstacleId);
+            
+            break; // Only process one answer selection per frame
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle answer selection and update scoring
+   * Requirements 4.1-4.6: Process correct/incorrect answers and update score/streak
+   * Requirement 1.3: Question changes only after obstacle interaction
+   */
+  private handleAnswerSelection(answer: number, isCorrect: boolean, obstacleId?: string): void {
+    const birdX = this.gameState.bird.x + this.gameState.bird.width / 2;
+    const birdY = this.gameState.bird.y + this.gameState.bird.height / 2;
+
+    let feedback: AnswerFeedback;
+
+    if (isCorrect) {
+      feedback = this.answerHandler.validateCorrectAnswer(birdX, birdY);
+      console.log(`Correct answer! +${feedback.points} points`);
+    } else {
+      // Get correct answer from current question for enhanced feedback (Requirement 4.5)
+      const correctAnswer = this.currentQuestion?.correctAnswer;
+      feedback = this.answerHandler.handleIncorrectAnswer(birdX, birdY, correctAnswer);
+      console.log(`Incorrect answer! ${feedback.points} points`);
+    }
+
+    // Update game state with math scoring from single source of truth (ScoringSystem)
+    const scoreState = this.answerHandler.getScoreState();
+    this.gameState.mathScore = scoreState.points;
+    this.gameState.streak = scoreState.streak;
+    this.gameState.totalCorrect = scoreState.totalCorrect;
+    this.gameState.totalIncorrect = scoreState.totalIncorrect;
+
+    // Handle obstacle interaction with QuestionSyncManager
+    // Requirement 1.3: Question changes only after obstacle interaction
+    if (obstacleId) {
+      const questionChanged = this.questionSyncManager.handleObstacleInteraction(obstacleId);
+      if (questionChanged) {
+        // Update current question reference after change
+        this.currentQuestion = this.questionSyncManager.getCurrentQuestion();
+        this.gameState.currentQuestion = this.currentQuestion;
+        
+        console.log('Question changed after obstacle interaction:', {
+          newQuestion: this.currentQuestion?.question,
+          obstacleId: obstacleId
+        });
+      }
+    }
+
+    // Notify callbacks
+    this.onMathScoreUpdate?.(scoreState.points, scoreState.streak);
+
+    // Clear pending validation
+    this.pendingAnswerValidation = null;
+  }
+
+
+
+
 
   /**
    * Check for collisions and handle game over
@@ -511,8 +784,18 @@ export class GameEngine {
     
     for (const obstacle of this.gameState.obstacles) {
       if (obstacle.isOffScreen()) {
-        // Return obstacle to inactive pool for reuse
-        this.returnObstacleToPool(obstacle);
+        // Remove obstacle association from QuestionSyncManager
+        const obstacleId = (obstacle as any).id;
+        if (obstacleId) {
+          this.questionSyncManager.removeObstacleAssociation(obstacleId);
+        }
+        
+        // Return obstacle to appropriate pool for reuse
+        if (obstacle instanceof MathObstacle) {
+          this.returnMathObstacleToPool(obstacle);
+        } else {
+          this.returnObstacleToPool(obstacle);
+        }
       } else {
         onScreenObstacles.push(obstacle);
       }
@@ -520,8 +803,9 @@ export class GameEngine {
     
     this.gameState.obstacles = onScreenObstacles;
     
-    // Update active pool to match game state obstacles
-    this.obstaclePool.active = this.gameState.obstacles.slice();
+    // Update active pools to match game state obstacles
+    this.obstaclePool.active = this.gameState.obstacles.filter(o => !(o instanceof MathObstacle)) as Obstacle[];
+    this.mathObstaclePool.active = this.gameState.obstacles.filter(o => o instanceof MathObstacle) as MathObstacle[];
   }
   
   /**
@@ -544,7 +828,23 @@ export class GameEngine {
   }
 
   /**
+   * Return math obstacle to inactive pool for reuse
+   */
+  private returnMathObstacleToPool(obstacle: MathObstacle): void {
+    // Reset obstacle state
+    obstacle.passed = false;
+    
+    // Note: Math obstacles contain questions, so we don't reuse them
+    // as the question context changes. Just remove from active pool.
+    const activeIndex = this.mathObstaclePool.active.indexOf(obstacle);
+    if (activeIndex !== -1) {
+      this.mathObstaclePool.active.splice(activeIndex, 1);
+    }
+  }
+
+  /**
    * Handle game over state
+   * Requirements 3.1, 3.2: Maintain traditional collision detection and display final stats
    */
   private handleGameOver(): void {
     this.gameState.state = GameState.GAME_OVER;
@@ -554,7 +854,22 @@ export class GameEngine {
       this.animationId = null;
     }
 
-    this.onGameOver?.();
+    // Calculate final game over data with math performance stats using single source of truth
+    const scoreState = this.answerHandler.getScoreState();
+    const totalAnswers = scoreState.totalCorrect + scoreState.totalIncorrect;
+    const accuracy = totalAnswers > 0 ? (scoreState.totalCorrect / totalAnswers) * 100 : 0;
+
+    const gameOverData: GameOverData = {
+      score: this.gameState.score,
+      mathScore: scoreState.points,
+      streak: scoreState.streak,
+      highestStreak: scoreState.highestStreak,
+      totalCorrect: scoreState.totalCorrect,
+      totalIncorrect: scoreState.totalIncorrect,
+      accuracy: Math.round(accuracy * 10) / 10 // Round to 1 decimal place
+    };
+
+    this.onGameOver?.(gameOverData);
   }
 
   /**
@@ -651,6 +966,7 @@ export class GameEngine {
 
   /**
    * Reset the game to initial state
+   * Requirements 3.3, 3.4: Add game restart functionality that resets math state appropriately
    */
   public reset(): void {
     // Cancel any running animation
@@ -659,8 +975,16 @@ export class GameEngine {
       this.animationId = null;
     }
 
-    // Reset game state
+    // Reset game state (this will reset all math tracking)
     this.gameState = this.createInitialState();
+    
+    // Reset math system
+    this.scoringSystem.reset();
+    this.mathQuestionManager.resetPool();
+    this.questionSyncManager.reset();
+    this.answerHandler.reset();
+    this.currentQuestion = null;
+    this.pendingAnswerValidation = null;
     
     // Reset visual effects
     this.particleSystem.clear();
@@ -672,6 +996,11 @@ export class GameEngine {
     
     // Reset obstacle generation system
     this.resetObstacleGeneration();
+
+    // Notify UI that question has been cleared
+    this.onQuestionUpdate?.(null);
+    this.onMathScoreUpdate?.(0, 0);
+    this.onFeedbackUpdate?.(null);
   }
   
   /**
@@ -683,9 +1012,18 @@ export class GameEngine {
       this.returnObstacleToPool(obstacle);
     }
     
+    // Clear math obstacles (don't reuse due to question context)
+    for (const obstacle of this.mathObstaclePool.active) {
+      this.returnMathObstacleToPool(obstacle);
+    }
+    
     // Clear active obstacles
     this.obstaclePool.active = [];
+    this.mathObstaclePool.active = [];
     this.lastObstacleSpawnTime = 0;
+    
+    // Reset next obstacle position to start at screen edge
+    this.gameState.nextObstacleX = GAME_CONFIG.CANVAS_WIDTH;
   }
 
   /**
@@ -728,6 +1066,57 @@ export class GameEngine {
   }
 
   /**
+   * Get current math score and streak
+   */
+  public getMathScore(): { score: number; streak: number } {
+    const scoreState = this.scoringSystem.getScoreState();
+    return {
+      score: scoreState.points,
+      streak: scoreState.streak
+    };
+  }
+
+  /**
+   * Get complete math performance data
+   * Requirements 3.4: Provide comprehensive math performance stats
+   */
+  public getMathPerformanceData(): {
+    mathScore: number;
+    streak: number;
+    totalCorrect: number;
+    totalIncorrect: number;
+    accuracy: number;
+    highestStreak: number;
+  } {
+    const scoreState = this.answerHandler.getScoreState();
+    const totalAnswers = scoreState.totalCorrect + scoreState.totalIncorrect;
+    const accuracy = totalAnswers > 0 ? (scoreState.totalCorrect / totalAnswers) * 100 : 0;
+
+    return {
+      mathScore: scoreState.points,
+      streak: scoreState.streak,
+      totalCorrect: scoreState.totalCorrect,
+      totalIncorrect: scoreState.totalIncorrect,
+      accuracy: Math.round(accuracy * 10) / 10,
+      highestStreak: scoreState.highestStreak
+    };
+  }
+
+  /**
+   * Get current question
+   */
+  public getCurrentQuestion(): MathQuestion | null {
+    return this.currentQuestion;
+  }
+
+  /**
+   * Get current answer feedback
+   */
+  public getCurrentFeedback(): AnswerFeedback | null {
+    return this.answerHandler.getActiveFeedback();
+  }
+
+  /**
    * Check if game is playing
    */
   public isPlaying(): boolean {
@@ -750,12 +1139,31 @@ export class GameEngine {
     totalGenerated: number;
     lastSpawnTime: number;
   } {
+    const totalActive = this.obstaclePool.active.length + this.mathObstaclePool.active.length;
+    const totalInactive = this.obstaclePool.inactive.length + this.mathObstaclePool.inactive.length;
+    
     return {
-      activeCount: this.obstaclePool.active.length,
-      inactiveCount: this.obstaclePool.inactive.length,
-      totalGenerated: this.obstaclePool.active.length + this.obstaclePool.inactive.length,
+      activeCount: totalActive,
+      inactiveCount: totalInactive,
+      totalGenerated: totalActive + totalInactive,
       lastSpawnTime: this.lastObstacleSpawnTime
     };
+  }
+
+  /**
+   * Get current obstacles for testing purposes
+   */
+  public getObstacles(): Obstacle[] {
+    return [...this.gameState.obstacles];
+  }
+
+  /**
+   * Set game difficulty for testing purposes
+   */
+  public setDifficulty(level: number): void {
+    // For now, difficulty doesn't change obstacle spacing as per requirement 5.4
+    // This method is provided for testing purposes but maintains consistent spacing
+    console.log(`Difficulty set to level ${level} - spacing remains consistent for educational focus`);
   }
   
   /**
@@ -778,7 +1186,39 @@ export class GameEngine {
       inactive: [...this.obstaclePool.inactive]
     };
   }
-  
+
+  /**
+   * Destroy the game engine and clean up resources
+   */
+  public destroy(): void {
+    // Cancel any running animation
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+
+    // Stop performance monitoring
+    this.performanceMonitor.stop();
+
+    // Clear all systems
+    this.particleSystem.clear();
+    this.answerHandler.reset();
+    
+    // Clear callbacks to prevent memory leaks
+    this.onScoreUpdate = undefined;
+    this.onGameOver = undefined;
+    this.onGameStart = undefined;
+    this.onError = undefined;
+    this.onQuestionUpdate = undefined;
+    this.onMathScoreUpdate = undefined;
+    this.onFeedbackUpdate = undefined;
+
+    // Clear canvas reference
+    this.canvas = null;
+    this.context = null;
+  }
+
+
   /**
    * Handle low performance by applying optimizations
    */
@@ -838,19 +1278,7 @@ export class GameEngine {
     // Pre-apply some optimizations for mobile
     this.performanceOptimizations.reducedParticles = true;
   }
-  
-  /**
-   * Check WebGL support as performance indicator
-   */
-  private checkWebGLSupport(): boolean {
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      return !!gl;
-    } catch (error) {
-      return false;
-    }
-  }
+
   
   /**
    * Handle errors with rate limiting and recovery attempts
@@ -928,9 +1356,9 @@ export class GameEngine {
         break;
     }
   }
-  
+
   /**
-   * Check if browser/device supports the game
+   * Check browser support for game features
    */
   public static checkBrowserSupport(): {
     supported: boolean;
@@ -939,76 +1367,46 @@ export class GameEngine {
   } {
     const issues: string[] = [];
     const recommendations: string[] = [];
-    
-    // Check for required APIs
-    if (typeof requestAnimationFrame === 'undefined') {
-      issues.push('requestAnimationFrame not supported');
-      recommendations.push('Update your browser to a modern version');
-    }
-    
-    if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
-      issues.push('Performance API not supported');
-      recommendations.push('Performance monitoring will be limited');
-    }
-    
-    // Check canvas support
-    try {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (!context) {
-        issues.push('Canvas 2D context not supported');
-        recommendations.push('Enable hardware acceleration in your browser');
+
+    // Check for Canvas support
+    const canvas = document.createElement('canvas');
+    if (!canvas.getContext) {
+      issues.push('Canvas not supported');
+    } else {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        issues.push('2D Canvas context not available');
       }
-    } catch (error) {
-      issues.push('Canvas API not supported');
-      recommendations.push('Use a modern browser with HTML5 support');
     }
-    
-    // Check for mobile limitations
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    if (isMobile) {
-      recommendations.push('Performance may be limited on mobile devices');
-      recommendations.push('Close other apps for better performance');
+
+    // Check for requestAnimationFrame
+    if (!window.requestAnimationFrame) {
+      issues.push('requestAnimationFrame not supported');
+      recommendations.push('Update to a modern browser');
     }
-    
+
+    // Check for performance.now
+    if (!window.performance || !window.performance.now) {
+      issues.push('High-resolution timing not available');
+      recommendations.push('Update browser for better performance');
+    }
+
     return {
       supported: issues.length === 0,
       issues,
       recommendations
     };
   }
-  
+
   /**
-   * Cleanup resources
+   * Check WebGL support as fallback indicator
    */
-  public destroy(): void {
+  private checkWebGLSupport(): boolean {
     try {
-      // Stop performance monitoring
-      this.performanceMonitor.stop();
-      
-      // Cancel animation frame
-      if (this.animationId) {
-        cancelAnimationFrame(this.animationId);
-        this.animationId = null;
-      }
-      
-      // Clear obstacle pools
-      this.obstaclePool.active = [];
-      this.obstaclePool.inactive = [];
-      
-      // Clear particle system
-      this.particleSystem.clear();
-      
-      // Clear references
-      this.canvas = null;
-      this.context = null;
-      this.onScoreUpdate = undefined;
-      this.onGameOver = undefined;
-      this.onGameStart = undefined;
-      this.onError = undefined;
-      
-    } catch (error) {
-      console.error('Error during cleanup:', error);
+      const canvas = document.createElement('canvas');
+      return !!(window.WebGLRenderingContext && canvas.getContext('webgl'));
+    } catch (e) {
+      return false;
     }
   }
 }

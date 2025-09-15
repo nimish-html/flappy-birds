@@ -44,3 +44,25 @@ export interface GameState {
   obstacles: Obstacle[];
   lastTime: number;
 }
+
+// Math question interfaces
+export interface MathQuestion {
+  id: string;
+  category: 'addition' | 'subtraction' | 'multiplication' | 'division';
+  question: string;
+  correctAnswer: number;
+  difficulty: number;
+}
+
+export interface QuestionPool {
+  available: MathQuestion[];
+  used: MathQuestion[];
+}
+
+// Answer zone interface for math obstacles
+export interface AnswerZone {
+  bounds: Bounds;
+  answer: number;
+  isCorrect: boolean;
+  position: 'upper' | 'lower';
+}

@@ -3,23 +3,33 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import GameCanvas from '../components/GameCanvas';
 import ScoreDisplay from '../components/ScoreDisplay';
-import GameOverScreen from '../components/GameOverScreen';
+import GameOverScreen, { GameOverData } from '../components/GameOverScreen';
+import QuestionDisplay from '../components/QuestionDisplay';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { GAME_CONFIG } from '../utils/gameConfig';
+import { MathQuestion } from '../types';
 
 interface GamePageState {
   score: number;
+  mathScore: number;
+  streak: number;
+  currentQuestion: MathQuestion | null;
   isGameOver: boolean;
   isPlaying: boolean;
   hasStarted: boolean;
+  gameOverData: GameOverData | null;
 }
 
 export default function Game() {
   const [gameState, setGameState] = useState<GamePageState>({
     score: 0,
+    mathScore: 0,
+    streak: 0,
+    currentQuestion: null,
     isGameOver: false,
     isPlaying: false,
-    hasStarted: false
+    hasStarted: false,
+    gameOverData: null
   });
 
   // Handle score updates from the game engine
@@ -30,13 +40,31 @@ export default function Game() {
     }));
   }, []);
 
-  // Handle game over event
-  const handleGameOver = useCallback((finalScore: number) => {
+  // Handle math score updates from the game engine
+  const handleMathScoreUpdate = useCallback((mathScore: number, streak: number) => {
     setGameState(prev => ({
       ...prev,
-      score: finalScore,
+      mathScore,
+      streak
+    }));
+  }, []);
+
+  // Handle question updates from the game engine
+  const handleQuestionUpdate = useCallback((question: MathQuestion | null) => {
+    setGameState(prev => ({
+      ...prev,
+      currentQuestion: question
+    }));
+  }, []);
+
+  // Handle game over event
+  const handleGameOver = useCallback((gameOverData: GameOverData) => {
+    setGameState(prev => ({
+      ...prev,
+      score: gameOverData.score,
       isGameOver: true,
-      isPlaying: false
+      isPlaying: false,
+      gameOverData: gameOverData
     }));
   }, []);
 
@@ -46,7 +74,8 @@ export default function Game() {
       ...prev,
       isPlaying: true,
       hasStarted: true,
-      isGameOver: false
+      isGameOver: false,
+      gameOverData: null
     }));
   }, []);
 
@@ -54,9 +83,13 @@ export default function Game() {
   const handleRestart = useCallback(() => {
     setGameState({
       score: 0,
+      mathScore: 0,
+      streak: 0,
+      currentQuestion: null,
       isGameOver: false,
       isPlaying: false,
-      hasStarted: false
+      hasStarted: false,
+      gameOverData: null
     });
     
     // Force a re-render of the GameCanvas component by changing its key
@@ -98,16 +131,34 @@ export default function Game() {
         {/* Game Title */}
         <div className="text-center mb-4 sm:mb-6">
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-2 drop-shadow-lg">
-            Flappy Bird
+            Math Bird
           </h1>
           <p className="text-blue-100 text-sm sm:text-lg px-2">
             {!gameState.hasStarted 
-              ? "Tap the canvas or press spacebar to start!" 
+              ? "Answer math questions by flying through the correct path!" 
               : gameState.isPlaying 
-                ? "Keep flying!" 
+                ? "Solve the math problem above!" 
                 : "Tap to jump!"
             }
           </p>
+          
+          {/* Math Score Display */}
+          {gameState.hasStarted && (gameState.mathScore > 0 || gameState.streak > 0) && (
+            <div className="flex justify-center space-x-4 mt-2">
+              <div className="bg-white bg-opacity-20 rounded-lg px-3 py-1 backdrop-blur-sm">
+                <span className="text-yellow-200 text-sm font-medium">
+                  Math Score: {gameState.mathScore}
+                </span>
+              </div>
+              {gameState.streak > 0 && (
+                <div className="bg-white bg-opacity-20 rounded-lg px-3 py-1 backdrop-blur-sm">
+                  <span className="text-green-200 text-sm font-medium">
+                    Streak: {gameState.streak}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Game Container */}
@@ -122,11 +173,26 @@ export default function Game() {
               width={GAME_CONFIG.CANVAS_WIDTH}
               height={GAME_CONFIG.CANVAS_HEIGHT}
               onScoreUpdate={handleScoreUpdate}
+              onMathScoreUpdate={handleMathScoreUpdate}
+              onQuestionUpdate={handleQuestionUpdate}
               onGameOver={handleGameOver}
               onGameStart={handleGameStart}
               className="rounded-lg shadow-2xl"
               enableResponsive={true}
             />
+
+            {/* Question Display - Overlay on top of canvas */}
+            {gameState.currentQuestion && gameState.isPlaying && (
+              <ErrorBoundary>
+                <QuestionDisplay
+                  question={gameState.currentQuestion.question}
+                  isVisible={true}
+                  canvasWidth={GAME_CONFIG.CANVAS_WIDTH}
+                  canvasHeight={GAME_CONFIG.CANVAS_HEIGHT}
+                  scale={1}
+                />
+              </ErrorBoundary>
+            )}
 
             {/* Score Display - Only show when game has started */}
             {gameState.hasStarted && (
@@ -142,6 +208,7 @@ export default function Game() {
             <ErrorBoundary>
               <GameOverScreen
                 score={gameState.score}
+                mathData={gameState.gameOverData || undefined}
                 onRestart={handleRestart}
                 isVisible={gameState.isGameOver}
               />
@@ -155,8 +222,10 @@ export default function Game() {
             <h3 className="font-semibold mb-2 text-sm sm:text-base">How to Play:</h3>
             <ul className="text-xs sm:text-sm space-y-1">
               <li>• Tap or press spacebar to make the bird jump</li>
-              <li>• Avoid hitting the pipes or the ground</li>
-              <li>• Score points by passing through pipe gaps</li>
+              <li>• Solve math questions by flying through the correct answer</li>
+              <li>• Correct answers: +10 points, build streaks for bonuses!</li>
+              <li>• Wrong answers: -5 points, streak resets</li>
+              <li>• Avoid hitting the pipes or ground to keep playing</li>
               {gameState.isGameOver && (
                 <li className="text-yellow-200 font-medium">• Press &apos;R&apos; or tap &quot;Play Again&quot; to restart</li>
               )}

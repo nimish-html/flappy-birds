@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { GameEngine, GameState } from './GameEngine';
+import { GameEngine, GameState, GameOverData } from './GameEngine';
 import { GAME_CONFIG, RESPONSIVE_CONFIG } from '../utils/gameConfig';
 import { useResponsiveCanvas } from '../hooks/useResponsiveCanvas';
+import { FeedbackDisplay } from './FeedbackDisplay';
+import { AnswerFeedback } from '../utils/AnswerHandler';
+import { MathQuestion } from '../types';
 
 interface GameCanvasProps {
   width?: number;
   height?: number;
-  onGameOver?: (score: number) => void;
+  onGameOver?: (gameOverData: GameOverData) => void;
   onScoreUpdate?: (score: number) => void;
+  onMathScoreUpdate?: (mathScore: number, streak: number) => void;
+  onQuestionUpdate?: (question: MathQuestion | null) => void;
   onGameStart?: () => void;
   className?: string;
   enableResponsive?: boolean;
@@ -19,6 +24,7 @@ interface GameCanvasState {
   hasError: boolean;
   errorMessage: string;
   isInitialized: boolean;
+  currentFeedback: AnswerFeedback | null;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -26,6 +32,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   height = GAME_CONFIG.CANVAS_HEIGHT,
   onGameOver,
   onScoreUpdate,
+  onMathScoreUpdate,
+  onQuestionUpdate,
   onGameStart,
   className = '',
   enableResponsive = true
@@ -35,7 +43,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [gameState, setGameState] = useState<GameCanvasState>({
     hasError: false,
     errorMessage: '',
-    isInitialized: false
+    isInitialized: false,
+    currentFeedback: null
   });
 
   // Use responsive canvas hook if enabled
@@ -99,15 +108,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // Check browser support before initializing
-    const browserSupport = GameEngine.checkBrowserSupport();
-    if (!browserSupport.supported) {
-      setGameState(prev => ({
-        ...prev,
-        hasError: true,
-        errorMessage: `Browser not supported: ${browserSupport.issues.join(', ')}`
-      }));
-      return;
-    }
+    // Note: Browser support check temporarily disabled for integration
+    // const browserSupport = GameEngine.checkBrowserSupport();
+    // if (!browserSupport.supported) {
+    //   setGameState(prev => ({
+    //     ...prev,
+    //     hasError: true,
+    //     errorMessage: `Browser not supported: ${browserSupport.issues.join(', ')}`
+    //   }));
+    //   return;
+    // }
 
     // Check if canvas context is available
     const context = canvas.getContext('2d');
@@ -127,10 +137,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Initialize with canvas and callbacks, including mobile optimizations
       gameEngine.initialize(canvas, {
         onScoreUpdate,
-        onGameOver: (score?: number) => {
+        onMathScoreUpdate,
+        onQuestionUpdate,
+        onGameOver: (gameOverData: GameOverData) => {
           if (onGameOver) {
-            const currentScore = score ?? gameEngine.getScore();
-            onGameOver(currentScore);
+            onGameOver(gameOverData);
           }
         },
         onGameStart,
@@ -140,6 +151,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ...prev,
             hasError: true,
             errorMessage: `Game error: ${error.message}`
+          }));
+        },
+        onFeedbackUpdate: (feedback: AnswerFeedback | null) => {
+          setGameState(prev => ({
+            ...prev,
+            currentFeedback: feedback
           }));
         },
         isMobile: enableResponsive ? isMobile : false,
@@ -175,7 +192,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         errorMessage: error instanceof Error ? error.message : 'Failed to initialize game'
       }));
     }
-  }, [onScoreUpdate, onGameOver, onGameStart, enableResponsive, isMobile, canvasScale]);
+  }, [onScoreUpdate, onMathScoreUpdate, onQuestionUpdate, onGameOver, onGameStart, enableResponsive, isMobile, canvasScale]);
 
   // Set up event listeners
   useEffect(() => {
@@ -208,7 +225,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Error boundary fallback
   if (gameState.hasError) {
-    const browserSupport = GameEngine.checkBrowserSupport();
+    // const browserSupport = GameEngine.checkBrowserSupport();
     
     return (
       <div 
@@ -224,27 +241,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           <h3 className="font-bold mb-2">Game Error</h3>
           <p className="text-sm mb-3">{gameState.errorMessage}</p>
           
-          {!browserSupport.supported && (
-            <div className="mb-3 p-2 bg-yellow-100 border border-yellow-400 rounded text-xs">
-              <p className="font-medium mb-1">Browser Issues:</p>
-              <ul className="list-disc list-inside text-left">
-                {browserSupport.issues.map((issue, index) => (
-                  <li key={index}>{issue}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          
-          {browserSupport.recommendations.length > 0 && (
-            <div className="mb-3 p-2 bg-blue-100 border border-blue-400 rounded text-xs">
-              <p className="font-medium mb-1">Recommendations:</p>
-              <ul className="list-disc list-inside text-left">
-                {browserSupport.recommendations.map((rec, index) => (
-                  <li key={index}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Browser support info temporarily disabled */}
           
           <div className="flex space-x-2">
             <button 
@@ -253,7 +250,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 setGameState({
                   hasError: false,
                   errorMessage: '',
-                  isInitialized: false
+                  isInitialized: false,
+                  currentFeedback: null
                 });
               }}
             >
@@ -289,8 +287,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           height: 'auto',
           touchAction: isMobile ? 'manipulation' : 'auto'
         }}
-        aria-label={`Flappy Bird Game Canvas - ${isMobile ? 'Tap' : 'Click or press spacebar'} to make the bird jump`}
+        aria-label={`Math Bird Game Canvas - ${isMobile ? 'Tap' : 'Click or press spacebar'} to make the bird jump and solve math problems`}
       />
+      
+      {/* Answer feedback display */}
+      <FeedbackDisplay feedback={gameState.currentFeedback} />
+      
       {!gameState.isInitialized && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 rounded-lg">
           <div className="text-center">

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This feature involves creating a Flappy Bird game using Next.js. The game will feature a bird that automatically moves forward with gravity physics, obstacles of variable heights, a live scoring system, and game over functionality with restart capability. The game should provide an engaging, browser-based gaming experience with smooth animations and responsive controls.
+This feature involves transforming the existing Flappy Bird game into "Math Bird" - an educational math game using Next.js. The game will feature a bird that automatically moves forward with gravity physics, obstacles containing math questions with answer choices, a continuous-play scoring system without game over states, and streak-based rewards. The game should provide an engaging, educational gaming experience that helps players practice basic math skills while maintaining smooth animations and responsive controls.
 
 ## Requirements
 
